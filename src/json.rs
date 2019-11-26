@@ -1,9 +1,15 @@
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+
 use crate::parser::{
     Concat, Concat3, Either, Error, Input, OneOf, OneOrMore, Parser, ResultOf, ZeroOrMore,
     ZeroOrOne,
 };
 use crate::{literals, parsers};
-use std::convert::TryInto;
+use core::convert::TryInto;
 
 literals! {
     pub WhitespaceChar => '\u{0020}' | '\u{000D}' | '\u{000A}' | '\u{0009}';
