@@ -5,6 +5,7 @@ extern crate alloc;
 
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+use crate::parser::alloc::fmt::Formatter;
 
 #[cfg_attr(feature = "std", derive(Debug))]
 #[derive(Copy, Clone, Default, PartialEq, Eq)]
@@ -54,6 +55,13 @@ impl core::ops::Sub<Self> for SimplePosition {
 #[cfg_attr(feature = "std", derive(Debug, PartialEq, Eq))]
 pub struct SimpleError {
     pub reasons: Vec<(SimplePosition, &'static str)>,
+}
+
+#[cfg(not(feature = "std"))]
+impl core::fmt::Debug for SimpleError {
+    fn fmt(&self, _f: &mut Formatter<'_>) -> core::fmt::Result {
+        Ok(())
+    }
 }
 
 impl Error for SimpleError {
