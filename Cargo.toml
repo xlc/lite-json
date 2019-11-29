@@ -5,6 +5,11 @@ authors = ["Bryan Chen <xlchen1291@gmail.com>"]
 description = "Simple JSON parser. Wasm / no_std ready."
 license = "Apache-2.0"
 edition = "2018"
+keywords = [ "json", "parser", "simple", "wasm", "no_std" ]
+repository = "https://github.com/xlc/lite-json"
+categories = [
+    "no-std",
+]
 
 [dependencies]
 paste = "0.1"
