@@ -5,6 +5,7 @@ extern crate alloc;
 
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+#[cfg(not(feature = "std"))]
 use crate::parser::alloc::fmt::Formatter;
 
 #[cfg_attr(feature = "std", derive(Debug))]
