@@ -6,7 +6,10 @@ edition = "2018"
 
 [dependencies]
 paste = "0.1"
+num-traits = { version = "0.2", optional = true, default-features = false }
 
 [features]
 default = ["std"]
 std = []
+# Enables converting values to floats in no-`std` environment
+float = ["num-traits"]
