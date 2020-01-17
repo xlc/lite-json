@@ -22,12 +22,15 @@ mod tests {
         assert_eq!(
             parse_json(&r#"{ "test": 1, "test2": [1e-4, 2.041e2, true, false, null, "\"1\n\""] }"#),
             Ok(JsonValue::Object(vec![
-                (vec!['t', 'e', 's', 't'], JsonValue::Number(NumberValue {
-                    integer: 1,
-                    fraction: 0,
-                    fraction_length: 0,
-                    exponent: 0
-                })),
+                (
+                    vec!['t', 'e', 's', 't'],
+                    JsonValue::Number(NumberValue {
+                        integer: 1,
+                        fraction: 0,
+                        fraction_length: 0,
+                        exponent: 0
+                    })
+                ),
                 (
                     vec!['t', 'e', 's', 't', '2'],
                     JsonValue::Array(vec![

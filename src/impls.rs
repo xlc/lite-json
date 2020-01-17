@@ -4,9 +4,9 @@ use crate::parser::{Error, Position};
 extern crate alloc;
 
 #[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-#[cfg(not(feature = "std"))]
 use crate::parser::alloc::fmt::Formatter;
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 
 #[cfg_attr(feature = "std", derive(Debug))]
 #[derive(Copy, Clone, Default, PartialEq, Eq)]
