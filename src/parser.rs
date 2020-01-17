@@ -41,7 +41,7 @@ pub struct ParserOptions {
 impl Default for ParserOptions {
     fn default() -> Self {
         ParserOptions {
-            max_nest_level: Some(100)
+            max_nest_level: Some(100),
         }
     }
 }
