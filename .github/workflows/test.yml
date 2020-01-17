@@ -1,0 +1,33 @@
+name: Test
+
+on:
+  pull_request:
+    branches:
+    - master
+  push:
+    branches:
+    - master
+
+jobs:
+  build:
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: actions/checkout@v1
+      with:
+        submodules: recursive
+    - name: Install toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: nightly-2019-12-04
+        components: rustfmt
+        target: wasm32-unknown-unknown
+        default: true
+    - name: Check format
+      run: cargo fmt --all -- --check
+    - name: Check Wasm
+      run: cargo check --no-default-features --target=wasm32-unknown-unknown
+    - name: Build
+      run: cargo build --locked
+    - name: Run tests
+      run: cargo test --all
