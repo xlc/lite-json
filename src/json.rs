@@ -5,8 +5,8 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use crate::parser::{
-    Concat, Concat3, Either, Error, Input, OneOf, OneOrMore, Parser, ResultOf, ZeroOrMore,
-    ZeroOrOne,
+    Concat, Concat3, Either, Error, Input, OneOf, OneOrMore, Parser, ParserContext, ResultOf,
+    ZeroOrMore, ZeroOrOne,
 };
 use crate::{literals, parsers};
 use core::convert::TryInto;
@@ -117,17 +117,21 @@ pub struct Escape;
 
 impl<I: Input> Parser<I> for Escape {
     type Output = char;
-    fn parse(input: &I, current: I::Position) -> ResultOf<I, Self::Output> {
+    fn parse(
+        input: &I,
+        current: I::Position,
+        context: &ParserContext,
+    ) -> ResultOf<I, Self::Output> {
         let (c, next) = input
             .next(current)
             .map_err(|e| e.add_reason(current, "Escape"))?;
         match c {
             '"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't' => Ok((c, next)),
             'u' => {
-                let (b1, next) = <Hex as Parser<I>>::parse(input, next)?;
-                let (b2, next) = <Hex as Parser<I>>::parse(input, next)?;
-                let (b3, next) = <Hex as Parser<I>>::parse(input, next)?;
-                let (b4, next) = <Hex as Parser<I>>::parse(input, next)?;
+                let (b1, next) = <Hex as Parser<I>>::parse(input, next, context)?;
+                let (b2, next) = <Hex as Parser<I>>::parse(input, next, context)?;
+                let (b3, next) = <Hex as Parser<I>>::parse(input, next, context)?;
+                let (b4, next) = <Hex as Parser<I>>::parse(input, next, context)?;
                 let byte = (b1 as u32) << 24 | (b2 as u32) << 16 | (b3 as u32) << 8 | (b4 as u32);
                 let c = byte
                     .try_into()
@@ -143,12 +147,16 @@ pub struct Character;
 
 impl<I: Input> Parser<I> for Character {
     type Output = char;
-    fn parse(input: &I, current: I::Position) -> ResultOf<I, Self::Output> {
+    fn parse(
+        input: &I,
+        current: I::Position,
+        context: &ParserContext,
+    ) -> ResultOf<I, Self::Output> {
         let (c, next) = input
             .next(current)
             .map_err(|e| e.add_reason(current, "Character"))?;
         match c {
-            '\\' => <Escape as Parser<I>>::parse(input, next),
+            '\\' => <Escape as Parser<I>>::parse(input, next, context),
             '"' => Err(input.error_at(current, "Character")),
             _ => Ok((c, next)),
         }
@@ -161,10 +169,14 @@ pub struct Member;
 
 impl<I: Input> Parser<I> for Member {
     type Output = (Vec<char>, JsonValue);
-    fn parse(input: &I, current: I::Position) -> ResultOf<I, Self::Output> {
-        let (_, next) = <Whitespace as Parser<I>>::parse(input, current)?;
-        let (key, next) = <String as Parser<I>>::parse(input, next)?;
-        let (_, next) = <Whitespace as Parser<I>>::parse(input, next)?;
+    fn parse(
+        input: &I,
+        current: I::Position,
+        context: &ParserContext,
+    ) -> ResultOf<I, Self::Output> {
+        let (_, next) = <Whitespace as Parser<I>>::parse(input, current, context)?;
+        let (key, next) = <String as Parser<I>>::parse(input, next, context)?;
+        let (_, next) = <Whitespace as Parser<I>>::parse(input, next, context)?;
         let next = input
             .next(next)
             .and_then(|(c, next)| {
@@ -175,7 +187,7 @@ impl<I: Input> Parser<I> for Member {
                 }
             })
             .map_err(|e| e.add_reason(current, "Member"))?;
-        let (value, next) = <Element as Parser<I>>::parse(input, next)?;
+        let (value, next) = <Element as Parser<I>>::parse(input, next, context)?;
         Ok(((key, value), next))
     }
 }
@@ -184,10 +196,14 @@ pub struct Element;
 
 impl<I: Input> Parser<I> for Element {
     type Output = JsonValue;
-    fn parse(input: &I, current: I::Position) -> ResultOf<I, Self::Output> {
-        let (_, next) = <Whitespace as Parser<I>>::parse(input, current)?;
-        let (output, next) = <Value as Parser<I>>::parse(input, next)?;
-        let (_, next) = <Whitespace as Parser<I>>::parse(input, next)?;
+    fn parse(
+        input: &I,
+        current: I::Position,
+        context: &ParserContext,
+    ) -> ResultOf<I, Self::Output> {
+        let (_, next) = <Whitespace as Parser<I>>::parse(input, current, context)?;
+        let (output, next) = <Value as Parser<I>>::parse(input, next, context)?;
+        let (_, next) = <Whitespace as Parser<I>>::parse(input, next, context)?;
         Ok((output, next))
     }
 }
@@ -238,17 +254,21 @@ where
     I::Position: Copy,
 {
     type Output = JsonValue;
-    fn parse(input: &I, current: I::Position) -> ResultOf<I, Self::Output> {
-        if let Ok((output, next)) = <Object as Parser<I>>::parse(input, current) {
+    fn parse(
+        input: &I,
+        current: I::Position,
+        context: &ParserContext,
+    ) -> ResultOf<I, Self::Output> {
+        if let Ok((output, next)) = <Object as Parser<I>>::parse(input, current, context) {
             return Ok((JsonValue::Object(output), next));
         }
-        if let Ok((output, next)) = <Array as Parser<I>>::parse(input, current) {
+        if let Ok((output, next)) = <Array as Parser<I>>::parse(input, current, context) {
             return Ok((JsonValue::Array(output), next));
         }
-        if let Ok((output, next)) = <String as Parser<I>>::parse(input, current) {
+        if let Ok((output, next)) = <String as Parser<I>>::parse(input, current, context) {
             return Ok((JsonValue::String(output), next));
         }
-        if let Ok((output, next)) = <Number as Parser<I>>::parse(input, current) {
+        if let Ok((output, next)) = <Number as Parser<I>>::parse(input, current, context) {
             return Ok((JsonValue::Number(output), next));
         }
         let (value, next) = input.next_range(current, 4)?;
@@ -272,10 +292,16 @@ type JsonObject = Vec<(Vec<char>, JsonValue)>;
 
 impl<I: Input> Parser<I> for Object {
     type Output = JsonObject;
-    fn parse(input: &I, current: I::Position) -> ResultOf<I, Self::Output> {
-        let (_, next) = <OpenCurlyBracketChar as Parser<I>>::parse(input, current)?;
-        let (output, next) = <OneOf<Members, Whitespace> as Parser<I>>::parse(input, next)?;
-        let (_, next) = <CloseCurlyBracketChar as Parser<I>>::parse(input, next)?;
+    fn parse(
+        input: &I,
+        current: I::Position,
+        context: &ParserContext,
+    ) -> ResultOf<I, Self::Output> {
+        let context = &context.nest(input, current)?;
+        let (_, next) = <OpenCurlyBracketChar as Parser<I>>::parse(input, current, context)?;
+        let (output, next) =
+            <OneOf<Members, Whitespace> as Parser<I>>::parse(input, next, context)?;
+        let (_, next) = <CloseCurlyBracketChar as Parser<I>>::parse(input, next, context)?;
         let output = match output {
             Either::A(a) => a,
             Either::B(_) => Vec::new(),
@@ -288,10 +314,14 @@ pub struct Members;
 
 impl<I: Input> Parser<I> for Members {
     type Output = Vec<(Vec<char>, JsonValue)>;
-    fn parse(input: &I, current: I::Position) -> ResultOf<I, Self::Output> {
-        let (output, next) = <Member as Parser<I>>::parse(input, current)?;
+    fn parse(
+        input: &I,
+        current: I::Position,
+        context: &ParserContext,
+    ) -> ResultOf<I, Self::Output> {
+        let (output, next) = <Member as Parser<I>>::parse(input, current, context)?;
         let (rest, next) =
-            <ZeroOrMore<Concat<CommaChar, Member>> as Parser<I>>::parse(input, next)?;
+            <ZeroOrMore<Concat<CommaChar, Member>> as Parser<I>>::parse(input, next, context)?;
         let mut result = Vec::new();
         result.push(output);
         if let Either::A(rest) = rest {
@@ -305,10 +335,14 @@ pub struct Elements;
 
 impl<I: Input> Parser<I> for Elements {
     type Output = Vec<JsonValue>;
-    fn parse(input: &I, current: I::Position) -> ResultOf<I, Self::Output> {
-        let (output, next) = <Element as Parser<I>>::parse(input, current)?;
+    fn parse(
+        input: &I,
+        current: I::Position,
+        context: &ParserContext,
+    ) -> ResultOf<I, Self::Output> {
+        let (output, next) = <Element as Parser<I>>::parse(input, current, context)?;
         let (rest, next) =
-            <ZeroOrMore<Concat<CommaChar, Element>> as Parser<I>>::parse(input, next)?;
+            <ZeroOrMore<Concat<CommaChar, Element>> as Parser<I>>::parse(input, next, context)?;
         let mut result = Vec::new();
         result.push(output);
         if let Either::A(rest) = rest {
@@ -322,12 +356,35 @@ pub struct Array;
 
 impl<I: Input> Parser<I> for Array {
     type Output = Vec<JsonValue>;
-    fn parse(input: &I, current: I::Position) -> ResultOf<I, Self::Output> {
-        let (_, next) = <OpenSquareBracketChar as Parser<I>>::parse(input, current)?;
-        let (res, next) = <Elements as Parser<I>>::parse(input, next)?;
-        let (_, next) = <CloseSquareBracketChar as Parser<I>>::parse(input, next)?;
+    fn parse(
+        input: &I,
+        current: I::Position,
+        context: &ParserContext,
+    ) -> ResultOf<I, Self::Output> {
+        let context = &context.nest(input, current)?;
+        let (_, next) = <OpenSquareBracketChar as Parser<I>>::parse(input, current, context)?;
+        let (res, next) = <Elements as Parser<I>>::parse(input, next, context)?;
+        let (_, next) = <CloseSquareBracketChar as Parser<I>>::parse(input, next, context)?;
         Ok((res, next))
     }
 }
 
-pub type Json = Element;
+pub struct Json;
+
+impl<I: Input> Parser<I> for Json {
+    type Output = <Element as Parser<I>>::Output;
+    fn parse(
+        input: &I,
+        current: I::Position,
+        context: &ParserContext,
+    ) -> ResultOf<I, Self::Output> {
+        let (_, next) = <Whitespace as Parser<I>>::parse(input, current, context)?;
+        let (res, next) = <Element as Parser<I>>::parse(input, next, context)?;
+        let (_, next) = <Whitespace as Parser<I>>::parse(input, next, context)?;
+        if input.is_end(next) {
+            Ok((res, next))
+        } else {
+            Err(input.error_at(next, "Expect end of input"))
+        }
+    }
+}

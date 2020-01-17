@@ -27,13 +27,60 @@ pub trait Input: Default {
         counts: u32,
     ) -> Result<(&str, Self::Position), Self::Error>;
     fn error_at(&self, pos: Self::Position, reason: &'static str) -> Self::Error;
+    fn is_end(&self, pos: Self::Position) -> bool;
 }
 
 pub type ResultOf<I, O> = Result<(O, <I as Input>::Position), <I as Input>::Error>;
 
+#[cfg_attr(feature = "std", derive(Debug, PartialEq, Eq))]
+#[derive(Clone)]
+pub struct ParserOptions {
+    pub max_nest_level: Option<u32>,
+}
+
+impl Default for ParserOptions {
+    fn default() -> Self {
+        ParserOptions {
+            max_nest_level: Some(100)
+        }
+    }
+}
+
+#[cfg_attr(feature = "std", derive(Debug, PartialEq, Eq))]
+#[derive(Clone)]
+pub struct ParserContext {
+    nest_level: u32,
+    options: ParserOptions,
+}
+
+impl ParserContext {
+    pub fn new(options: ParserOptions) -> Self {
+        Self {
+            nest_level: 0,
+            options,
+        }
+    }
+
+    pub fn options(&self) -> &ParserOptions {
+        &self.options
+    }
+
+    pub fn nest<I: Input>(&self, input: &I, pos: I::Position) -> Result<Self, I::Error> {
+        if Some(self.nest_level) == self.options.max_nest_level {
+            Err(input.error_at(pos, "Exceeded nest level"))
+        } else {
+            Ok(Self {
+                nest_level: self.nest_level + 1,
+                options: self.options.clone(),
+            })
+        }
+    }
+}
+
 pub trait Parser<I: Input> {
     type Output;
-    fn parse(input: &I, current: I::Position) -> ResultOf<I, Self::Output>;
+    fn parse(input: &I, current: I::Position, context: &ParserContext)
+        -> ResultOf<I, Self::Output>;
 }
 
 pub trait Predicate<T> {
@@ -44,7 +91,11 @@ pub struct ExpectChar<P>(PhantomData<P>);
 
 impl<P: Predicate<char>, I: Input> Parser<I> for ExpectChar<P> {
     type Output = char;
-    fn parse(input: &I, current: I::Position) -> ResultOf<I, Self::Output> {
+    fn parse(
+        input: &I,
+        current: I::Position,
+        _context: &ParserContext,
+    ) -> ResultOf<I, Self::Output> {
         let (c, next) = input
             .next(current)
             .map_err(|e| e.add_reason(current, "ExpectChar"))?;
@@ -60,7 +111,11 @@ pub struct Null;
 
 impl<I: Input> Parser<I> for Null {
     type Output = ();
-    fn parse(_input: &I, current: I::Position) -> ResultOf<I, Self::Output> {
+    fn parse(
+        _input: &I,
+        current: I::Position,
+        _context: &ParserContext,
+    ) -> ResultOf<I, Self::Output> {
         Ok(((), current))
     }
 }
@@ -69,10 +124,15 @@ pub struct Concat<P, P2>(PhantomData<(P, P2)>);
 
 impl<I: Input, P: Parser<I>, P2: Parser<I>> Parser<I> for Concat<P, P2> {
     type Output = (P::Output, P2::Output);
-    fn parse(input: &I, current: I::Position) -> ResultOf<I, Self::Output> {
+    fn parse(
+        input: &I,
+        current: I::Position,
+        context: &ParserContext,
+    ) -> ResultOf<I, Self::Output> {
         let (output1, pos) =
-            P::parse(input, current).map_err(|e| e.add_reason(current, "Concat1"))?;
-        let (output2, pos) = P2::parse(input, pos).map_err(|e| e.add_reason(current, "Concat2"))?;
+            P::parse(input, current, context).map_err(|e| e.add_reason(current, "Concat1"))?;
+        let (output2, pos) =
+            P2::parse(input, pos, context).map_err(|e| e.add_reason(current, "Concat2"))?;
         Ok(((output1, output2), pos))
     }
 }
@@ -91,10 +151,16 @@ pub struct OneOf<P, P2>(PhantomData<(P, P2)>);
 
 impl<I: Input, P: Parser<I>, P2: Parser<I>> Parser<I> for OneOf<P, P2> {
     type Output = Either<P::Output, P2::Output>;
-    fn parse(input: &I, current: I::Position) -> ResultOf<I, Self::Output> {
-        P::parse(input, current)
+    fn parse(
+        input: &I,
+        current: I::Position,
+        context: &ParserContext,
+    ) -> ResultOf<I, Self::Output> {
+        P::parse(input, current, context)
             .map(|(output, pos)| (Either::A(output), pos))
-            .or_else(|_| P2::parse(input, current).map(|(output, pos)| (Either::B(output), pos)))
+            .or_else(|_| {
+                P2::parse(input, current, context).map(|(output, pos)| (Either::B(output), pos))
+            })
             .map_err(|e| e.add_reason(current, "OneOf"))
     }
 }
@@ -117,13 +183,17 @@ pub struct OneOrMore<P>(PhantomData<P>);
 
 impl<I: Input, P: Parser<I>> Parser<I> for OneOrMore<P> {
     type Output = Vec<P::Output>;
-    fn parse(input: &I, current: I::Position) -> ResultOf<I, Self::Output> {
+    fn parse(
+        input: &I,
+        current: I::Position,
+        context: &ParserContext,
+    ) -> ResultOf<I, Self::Output> {
         let mut output_list = Vec::new();
         let (output, mut pos) =
-            P::parse(input, current).map_err(|e| e.add_reason(current, "OneOrMore"))?;
+            P::parse(input, current, context).map_err(|e| e.add_reason(current, "OneOrMore"))?;
         output_list.push(output);
         loop {
-            if let Ok((output, next_pos)) = P::parse(input, pos) {
+            if let Ok((output, next_pos)) = P::parse(input, pos, context) {
                 pos = next_pos;
                 output_list.push(output);
             } else {
@@ -166,6 +236,10 @@ impl Input for &str {
         let mut reasons = Vec::new();
         reasons.push((pos, reason));
         SimpleError { reasons }
+    }
+
+    fn is_end(&self, pos: Self::Position) -> bool {
+        pos.index() as usize >= self.len()
     }
 }
 
@@ -219,8 +293,8 @@ macro_rules! parsers {
             $vis struct $name;
             impl<I: $crate::parser::Input> $crate::parser::Parser<I> for $name {
                 type Output = $output_type;
-                fn parse(input: &I, current: I::Position) -> $crate::parser::ResultOf<I, Self::Output> {
-                    let ($output, pos) = <$type as $crate::parser::Parser<I>>::parse(input, current)
+                fn parse(input: &I, current: I::Position, context: &ParserContext) -> $crate::parser::ResultOf<I, Self::Output> {
+                    let ($output, pos) = <$type as $crate::parser::Parser<I>>::parse(input, current, context)
                         .map_err(|e| <I::Error as $crate::parser::Error>::add_reason(e, current, stringify!($name)))?;
                     let res = $body;
                     Ok((res, pos))

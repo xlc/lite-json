@@ -1,20 +1,28 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use crate::impls::SimpleError;
-use crate::json::{Json, JsonValue};
-use crate::parser::Parser;
+pub use crate::impls::SimpleError;
+pub use crate::json::{Json, JsonValue};
+pub use crate::parser::{Parser, ParserContext, ParserOptions};
 
 pub mod impls;
 pub mod json;
 pub mod parser;
 
 pub fn parse_json(input: &str) -> Result<JsonValue, SimpleError> {
-    Json::parse(&input, Default::default()).map(|(ret, _)| ret)
+    parse_json_with_options(input, Default::default())
+}
+
+pub fn parse_json_with_options(
+    input: &str,
+    options: ParserOptions,
+) -> Result<JsonValue, SimpleError> {
+    Json::parse(&input, Default::default(), &ParserContext::new(options)).map(|(ret, _)| ret)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::impls::SimplePosition;
     use crate::json::NumberValue;
 
     #[test]
@@ -54,5 +62,84 @@ mod tests {
                 )
             ]))
         )
+    }
+
+    #[test]
+    fn it_should_consume_all() {
+        assert_eq!(
+            parse_json(&r#""1"a"#),
+            Err(SimpleError {
+                reasons: vec![(
+                    SimplePosition {
+                        index: 3,
+                        line: 0,
+                        column: 3
+                    },
+                    "Expect end of input"
+                )]
+            })
+        )
+    }
+
+    #[test]
+    fn it_accepts_nest_level() {
+        assert_eq!(
+            parse_json_with_options(
+                &r#"{ "test": 1 }"#,
+                ParserOptions {
+                    max_nest_level: Some(1)
+                }
+            ),
+            Ok(JsonValue::Object(vec![(
+                vec!['t', 'e', 's', 't'],
+                JsonValue::Number(NumberValue {
+                    integer: 1,
+                    fraction: 0,
+                    fraction_length: 0,
+                    exponent: 0
+                })
+            ),]))
+        );
+    }
+
+    #[test]
+    fn it_accepts_more_nest_level() {
+        assert_eq!(
+            parse_json_with_options(
+                &r#"{ "test": { "a": [ {} ] } }"#,
+                ParserOptions {
+                    max_nest_level: Some(5)
+                }
+            ),
+            Ok(JsonValue::Object(vec![(
+                vec!['t', 'e', 's', 't'],
+                JsonValue::Object(vec![(
+                    vec!['a'],
+                    JsonValue::Array(vec![JsonValue::Object(vec![])])
+                )])
+            )]))
+        );
+    }
+
+    #[test]
+    fn it_error_on_too_deep_nest() {
+        assert_eq!(
+            parse_json_with_options(
+                &r#"{ "test": { "a": [ {} ] } }"#,
+                ParserOptions {
+                    max_nest_level: Some(3)
+                }
+            ),
+            Err(SimpleError {
+                reasons: vec![(
+                    SimplePosition {
+                        index: 0,
+                        line: 0,
+                        column: 0
+                    },
+                    "Value"
+                )]
+            })
+        );
     }
 }
