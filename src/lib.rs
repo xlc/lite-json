@@ -25,7 +25,7 @@ pub fn parse_json_with_options(
 mod tests {
     use super::*;
     use crate::impls::SimplePosition;
-    use crate::json_parser::NumberValue;
+    use crate::NumberValue;
 
     #[test]
     fn it_works() {
