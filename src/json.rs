@@ -4,6 +4,9 @@ extern crate alloc;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
+#[cfg(not(feature = "std"))]
+use alloc::string::ToString;
+
 #[cfg_attr(feature = "std", derive(Debug))]
 #[derive(Clone, PartialEq)]
 pub struct NumberValue {
