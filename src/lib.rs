@@ -1,7 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use crate::impls::SimpleError;
-pub use crate::json_parser::{Json, JsonValue};
+pub use crate::json::{JsonObject, JsonValue, NumberValue, Serialize};
+pub use crate::json_parser::Json;
 pub use crate::parser::{Parser, ParserContext, ParserOptions};
 
 pub mod impls;
