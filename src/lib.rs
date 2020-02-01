@@ -5,9 +5,9 @@ pub use crate::json_parser::{Json, JsonValue};
 pub use crate::parser::{Parser, ParserContext, ParserOptions};
 
 pub mod impls;
+pub mod json;
 pub mod json_parser;
 pub mod parser;
-pub mod json;
 
 pub fn parse_json(input: &str) -> Result<JsonValue, SimpleError> {
     parse_json_with_options(input, Default::default())

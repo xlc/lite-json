@@ -4,12 +4,12 @@ extern crate alloc;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
+pub use crate::json::{JsonObject, JsonValue, NumberValue};
 use crate::parser::{
     Concat, Concat3, Either, Error, Input, OneOf, OneOrMore, Parser, ParserContext, ResultOf,
     ZeroOrMore, ZeroOrOne,
 };
 use crate::{literals, parsers};
-pub use crate::json::{NumberValue, JsonValue, JsonObject};
 
 use core::convert::TryInto;
 
@@ -250,7 +250,6 @@ where
 }
 
 pub struct Object;
-
 
 impl<I: Input> Parser<I> for Object {
     type Output = JsonObject;

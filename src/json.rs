@@ -46,41 +46,144 @@ pub enum JsonValue {
 }
 
 pub trait Serialize {
-    fn serialize(&self) -> Vec<u8>;
+    fn serialize(&self) -> Vec<u8> {
+        let mut res = Vec::new();
+        self.serialize_to(&mut res, 0, 0);
+        res
+    }
+    fn format(&self, indent: u32) -> Vec<u8> {
+        let mut res = Vec::new();
+        self.serialize_to(&mut res, indent, 0);
+        res
+    }
+    fn serialize_to(&self, buffer: &mut Vec<u8>, indent: u32, level: u32);
 }
 
 impl Serialize for NumberValue {
-    fn serialize(&self) -> Vec<u8> {
-        let mut integer_part = self.integer.to_string().into_bytes();
-        let mut fraction_part = if self.fraction > 0 {
-            let mut fraction_part = vec!['.' as u8];
-            let mut fraction_nums = self.fraction.to_string().into_bytes();
+    fn serialize_to(&self, buffer: &mut Vec<u8>, _indent: u32, _level: u32) {
+        buffer.extend_from_slice(self.integer.to_string().as_bytes());
+
+        if self.fraction > 0 {
+            buffer.push('.' as u8);
+
+            let fraction_nums = self.fraction.to_string();
             let fraction_length = self.fraction_length as usize;
-            if fraction_nums.len() < fraction_length {
-                let mut zeros = vec!['0' as u8; fraction_length - fraction_nums.len()];
-                fraction_part.append(&mut zeros);
-                fraction_part.append(&mut fraction_nums);
-            } else {
-                fraction_part.append(&mut fraction_nums);
+            for _ in 0..fraction_length - fraction_nums.len() {
+                buffer.push('0' as u8);
             }
-            fraction_part
-        } else {
-            Vec::<u8>::new()
-        };
-        let mut exponent_part = if self.exponent == 0 {
-            Vec::<u8>::new()
-        } else {
-            let mut exponent_part = vec!['e' as u8];
+            buffer.extend_from_slice(fraction_nums.as_bytes())
+        }
+        if self.exponent != 0 {
+            buffer.push('e' as u8);
             if self.exponent < 0 {
-                exponent_part.push('-' as u8);
+                buffer.push('-' as u8);
             }
-            let mut exp_str = self.exponent.abs().to_string().into_bytes();
-            exponent_part.append(&mut exp_str);
-            exponent_part
-        };
-        integer_part.append(&mut fraction_part);
-        integer_part.append(&mut exponent_part);
-        integer_part
+            buffer.extend_from_slice(self.exponent.abs().to_string().as_bytes());
+        }
+    }
+}
+
+fn push_string(buffer: &mut Vec<u8>, chars: &Vec<char>) {
+    buffer.push('"' as u8);
+    for ch in chars {
+        match ch {
+            '\x08' => buffer.extend_from_slice(br#"\b"#),
+            '\x0c' => buffer.extend_from_slice(br#"\f"#),
+            '\n' => buffer.extend_from_slice(br#"\n"#),
+            '\r' => buffer.extend_from_slice(br#"\r"#),
+            '\t' => buffer.extend_from_slice(br#"\t"#),
+            '\"' => buffer.extend_from_slice(br#"\""#),
+            '\\' => buffer.extend_from_slice(br#"\\"#),
+            _ => match ch.len_utf8() {
+                1 => {
+                    let mut buff = [0u8; 1];
+                    ch.encode_utf8(&mut buff);
+                    buffer.push(buff[0]);
+                }
+                2 => {
+                    let mut buff = [0u8; 2];
+                    ch.encode_utf8(&mut buff);
+                    buffer.extend_from_slice(&buff);
+                }
+                3 => {
+                    let mut buff = [0u8; 3];
+                    ch.encode_utf8(&mut buff);
+                    buffer.extend_from_slice(&buff);
+                }
+                4 => {
+                    let mut buff = [0u8; 4];
+                    ch.encode_utf8(&mut buff);
+                    buffer.extend_from_slice(&buff);
+                }
+                _ => panic!("Invalid UTF8 character"),
+            },
+        }
+    }
+    buffer.push('"' as u8);
+}
+
+fn push_new_line_indent(buffer: &mut Vec<u8>, indent: u32, level: u32) {
+    if indent > 0 {
+        buffer.push('\n' as u8);
+    }
+    let count = (indent * level) as usize;
+    buffer.reserve(count);
+    for _ in 0..count {
+        buffer.push(' ' as u8);
+    }
+}
+
+impl Serialize for JsonValue {
+    fn serialize_to(&self, buffer: &mut Vec<u8>, indent: u32, level: u32) {
+        match self {
+            JsonValue::Object(obj) => {
+                buffer.push('{' as u8);
+                if obj.len() > 0 {
+                    push_new_line_indent(buffer, indent, level + 1);
+                    push_string(buffer, &obj[0].0);
+                    buffer.push(':' as u8);
+                    if indent > 0 {
+                        buffer.push(' ' as u8);
+                    }
+                    obj[0].1.serialize_to(buffer, indent, level + 1);
+                    for (key, val) in obj.iter().skip(1) {
+                        buffer.push(',' as u8);
+                        push_new_line_indent(buffer, indent, level + 1);
+                        push_string(buffer, key);
+                        buffer.push(':' as u8);
+                        if indent > 0 {
+                            buffer.push(' ' as u8);
+                        }
+                        val.serialize_to(buffer, indent, level + 1);
+                    }
+                    push_new_line_indent(buffer, indent, level);
+                    buffer.push('}' as u8);
+                } else {
+                    buffer.push('}' as u8);
+                }
+            }
+            JsonValue::Array(arr) => {
+                buffer.push('[' as u8);
+                if arr.len() > 0 {
+                    push_new_line_indent(buffer, indent, level + 1);
+                    arr[0].serialize_to(buffer, indent, level + 1);
+                    for val in arr.iter().skip(1) {
+                        buffer.push(',' as u8);
+                        push_new_line_indent(buffer, indent, level + 1);
+                        val.serialize_to(buffer, indent, level);
+                    }
+                    push_new_line_indent(buffer, indent, level);
+                    buffer.push(']' as u8);
+                } else {
+                    buffer.push(']' as u8);
+                }
+            }
+            JsonValue::String(str) => push_string(buffer, str),
+            JsonValue::Number(num) => num.serialize_to(buffer, indent, level),
+            JsonValue::Boolean(true) => buffer.extend_from_slice(b"true"),
+            JsonValue::Boolean(false) => buffer.extend_from_slice(b"false"),
+            JsonValue::Null => buffer.extend_from_slice(b"null"),
+        }
     }
 }
 
@@ -153,5 +256,76 @@ mod tests {
             exponent: 5,
         };
         assert_eq!(val.serialize(), b"-1234.05e5");
+    }
+
+    #[test]
+    fn serialize_works() {
+        let obj = JsonValue::Object(vec![(
+            "test\"123".chars().into_iter().collect(),
+            JsonValue::Null,
+        )]);
+        assert_eq!(
+            std::str::from_utf8(&obj.format(4)[..]).unwrap(),
+            r#"{
+    "test\"123": null
+}"#
+        );
+
+        let obj = JsonValue::Object(vec![
+            (
+                vec!['t', 'e', 's', 't'],
+                JsonValue::Number(NumberValue {
+                    integer: 123,
+                    fraction: 4,
+                    fraction_length: 2,
+                    exponent: 0,
+                }),
+            ),
+            (
+                vec!['t', 'e', 's', 't', '2'],
+                JsonValue::Array(vec![
+                    JsonValue::Number(NumberValue {
+                        integer: 1,
+                        fraction: 0,
+                        fraction_length: 0,
+                        exponent: -4,
+                    }),
+                    JsonValue::Number(NumberValue {
+                        integer: 2,
+                        fraction: 41,
+                        fraction_length: 3,
+                        exponent: 2,
+                    }),
+                    JsonValue::Boolean(true),
+                    JsonValue::Boolean(false),
+                    JsonValue::Null,
+                    JsonValue::String(vec!['\"', '1', 'n', '\"']),
+                    JsonValue::Object(vec![]),
+                    JsonValue::Array(vec![]),
+                ]),
+            ),
+        ]);
+
+        assert_eq!(
+            std::str::from_utf8(&obj.format(4)[..]).unwrap(),
+            r#"{
+    "test": 123.04,
+    "test2": [
+        1e-4,
+        2.041e2,
+        true,
+        false,
+        null,
+        "\"1n\"",
+        {},
+        []
+    ]
+}"#
+        );
+
+        assert_eq!(
+            std::str::from_utf8(&obj.serialize()[..]).unwrap(),
+            r#"{"test":123.04,"test2":[1e-4,2.041e2,true,false,null,"\"1n\"",{},[]]}"#
+        );
     }
 }
