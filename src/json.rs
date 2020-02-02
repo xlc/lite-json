@@ -4,211 +4,8 @@ extern crate alloc;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
-use crate::parser::{
-    Concat, Concat3, Either, Error, Input, OneOf, OneOrMore, Parser, ParserContext, ResultOf,
-    ZeroOrMore, ZeroOrOne,
-};
-use crate::{literals, parsers};
-use core::convert::TryInto;
-
-literals! {
-    pub WhitespaceChar => '\u{0020}' | '\u{000D}' | '\u{000A}' | '\u{0009}';
-    pub SignChar => '+' | '-';
-    pub NegativeSignChar => '-';
-    pub EChar => 'E' | 'e';
-    pub OneToNineChar => '1' ..= '9';
-    pub DigitChar => '0' ..= '9';
-    pub DotChar => '.';
-    pub HexChar => '0' ..= '9' | 'a' ..= 'f' | 'A' ..= 'F';
-    pub DoubleQuoteChar => '"';
-    pub OpenCurlyBracketChar => '{';
-    pub CloseCurlyBracketChar => '}';
-    pub CommaChar => ',';
-    pub OpenSquareBracketChar => '[';
-    pub CloseSquareBracketChar => ']';
-}
-
-pub type Whitespace = ZeroOrMore<WhitespaceChar>;
-
-pub type Sign = ZeroOrOne<SignChar>;
-
-pub type Digits = OneOrMore<DigitChar>;
-
-parsers! {
-    pub PositiveInteger = OneOf<Concat<OneToNineChar, Digits>, DigitChar>, u64, (output) => {
-        match output {
-            Either::A((c, cs)) => {
-                let mut val = c.to_digit(10).unwrap() as u64;
-                for c in cs {
-                    val *= 10;
-                    val += c.to_digit(10).unwrap() as u64;
-                }
-                val
-            },
-            Either::B(c) => c.to_digit(10).unwrap() as u64,
-        }
-    };
-
-    pub NegativeInteger = Concat<NegativeSignChar, PositiveInteger>, i64, (output) => {
-        let (_, output) = output;
-        - (output as i64)
-    };
-
-    pub Integer = OneOf<PositiveInteger, NegativeInteger>, i64, (output) => {
-        match output {
-            Either::A(a) => a as i64,
-            Either::B(b) => b,
-        }
-    };
-
-    pub Fraction = ZeroOrOne<Concat<DotChar, Digits>>, (u64, u32), (output) => {
-        match output {
-            Either::A((_, cs)) => {
-                let mut val = 0u64;
-                let len = cs.len();
-                for c in cs {
-                    val *= 10u64;
-                    val += c.to_digit(10).unwrap() as u64;
-                }
-                (val, len as u32)
-            },
-            Either::B(_) => (0u64, 0u32),
-        }
-    };
-
-    pub Exponent = ZeroOrOne<Concat3<EChar, Sign, Digits>>, i32, (output) => {
-        match output {
-            Either::A((_, (s, cs))) => {
-                let mul = if let Either::A('-') = s { -1 } else { 1 };
-                let mut val = 0i32;
-                for c in cs {
-                    val *= 10;
-                    val += c.to_digit(10).unwrap() as i32;
-                }
-                val * mul
-            },
-            Either::B(_) => 0,
-        }
-    };
-
-    pub Number = Concat3<Integer, Fraction, Exponent>, NumberValue, (output) => {
-        let (n, (f, e)) = output;
-        NumberValue {
-            integer: n,
-            fraction: f.0,
-            fraction_length: f.1,
-            exponent: e,
-        }
-    };
-
-    pub Hex = HexChar, u8, (output) => {
-        output.to_digit(16).unwrap() as u8
-    };
-
-    pub String = Concat3<DoubleQuoteChar, Characters, DoubleQuoteChar>, Vec<char>, (output) => {
-        match (output.1).0 {
-            Either::A(bytes) => bytes,
-            Either::B(_) => Vec::new(),
-        }
-    };
-}
-
-pub struct Escape;
-
-impl<I: Input> Parser<I> for Escape {
-    type Output = char;
-    fn parse(
-        input: &I,
-        current: I::Position,
-        context: &ParserContext,
-    ) -> ResultOf<I, Self::Output> {
-        let (c, next) = input
-            .next(current)
-            .map_err(|e| e.add_reason(current, "Escape"))?;
-        match c {
-            '"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't' => Ok((c, next)),
-            'u' => {
-                let (b1, next) = <Hex as Parser<I>>::parse(input, next, context)?;
-                let (b2, next) = <Hex as Parser<I>>::parse(input, next, context)?;
-                let (b3, next) = <Hex as Parser<I>>::parse(input, next, context)?;
-                let (b4, next) = <Hex as Parser<I>>::parse(input, next, context)?;
-                let byte = (b1 as u32) << 24 | (b2 as u32) << 16 | (b3 as u32) << 8 | (b4 as u32);
-                let c = byte
-                    .try_into()
-                    .map_err(|_| input.error_at(current, "Escape"))?;
-                Ok((c, next))
-            }
-            _ => Err(input.error_at(current, "Escape")),
-        }
-    }
-}
-
-pub struct Character;
-
-impl<I: Input> Parser<I> for Character {
-    type Output = char;
-    fn parse(
-        input: &I,
-        current: I::Position,
-        context: &ParserContext,
-    ) -> ResultOf<I, Self::Output> {
-        let (c, next) = input
-            .next(current)
-            .map_err(|e| e.add_reason(current, "Character"))?;
-        match c {
-            '\\' => <Escape as Parser<I>>::parse(input, next, context),
-            '"' => Err(input.error_at(current, "Character")),
-            _ => Ok((c, next)),
-        }
-    }
-}
-
-pub type Characters = ZeroOrMore<Character>;
-
-pub struct Member;
-
-impl<I: Input> Parser<I> for Member {
-    type Output = (Vec<char>, JsonValue);
-    fn parse(
-        input: &I,
-        current: I::Position,
-        context: &ParserContext,
-    ) -> ResultOf<I, Self::Output> {
-        let (_, next) = <Whitespace as Parser<I>>::parse(input, current, context)?;
-        let (key, next) = <String as Parser<I>>::parse(input, next, context)?;
-        let (_, next) = <Whitespace as Parser<I>>::parse(input, next, context)?;
-        let next = input
-            .next(next)
-            .and_then(|(c, next)| {
-                if c == ':' {
-                    Ok(next)
-                } else {
-                    Err(input.error_at(next, "Character"))
-                }
-            })
-            .map_err(|e| e.add_reason(current, "Member"))?;
-        let (value, next) = <Element as Parser<I>>::parse(input, next, context)?;
-        Ok(((key, value), next))
-    }
-}
-
-pub struct Element;
-
-impl<I: Input> Parser<I> for Element {
-    type Output = JsonValue;
-    fn parse(
-        input: &I,
-        current: I::Position,
-        context: &ParserContext,
-    ) -> ResultOf<I, Self::Output> {
-        let (_, next) = <Whitespace as Parser<I>>::parse(input, current, context)?;
-        let (output, next) = <Value as Parser<I>>::parse(input, next, context)?;
-        let (_, next) = <Whitespace as Parser<I>>::parse(input, next, context)?;
-        Ok((output, next))
-    }
-}
-
-pub struct Value;
+#[cfg(not(feature = "std"))]
+use alloc::string::ToString;
 
 #[cfg_attr(feature = "std", derive(Debug))]
 #[derive(Clone, PartialEq)]
@@ -238,6 +35,8 @@ impl Into<f64> for NumberValue {
     }
 }
 
+pub type JsonObject = Vec<(Vec<char>, JsonValue)>;
+
 #[cfg_attr(feature = "std", derive(Debug))]
 #[derive(Clone, PartialEq)]
 pub enum JsonValue {
@@ -249,142 +48,287 @@ pub enum JsonValue {
     Null,
 }
 
-impl<I: Input> Parser<I> for Value
-where
-    I::Position: Copy,
-{
-    type Output = JsonValue;
-    fn parse(
-        input: &I,
-        current: I::Position,
-        context: &ParserContext,
-    ) -> ResultOf<I, Self::Output> {
-        if let Ok((output, next)) = <Object as Parser<I>>::parse(input, current, context) {
-            return Ok((JsonValue::Object(output), next));
+pub trait Serialize {
+    fn serialize(&self) -> Vec<u8> {
+        let mut res = Vec::new();
+        self.serialize_to(&mut res, 0, 0);
+        res
+    }
+    fn format(&self, indent: u32) -> Vec<u8> {
+        let mut res = Vec::new();
+        self.serialize_to(&mut res, indent, 0);
+        res
+    }
+    fn serialize_to(&self, buffer: &mut Vec<u8>, indent: u32, level: u32);
+}
+
+impl Serialize for NumberValue {
+    fn serialize_to(&self, buffer: &mut Vec<u8>, _indent: u32, _level: u32) {
+        buffer.extend_from_slice(self.integer.to_string().as_bytes());
+
+        if self.fraction > 0 {
+            buffer.push('.' as u8);
+
+            let fraction_nums = self.fraction.to_string();
+            let fraction_length = self.fraction_length as usize;
+            for _ in 0..fraction_length - fraction_nums.len() {
+                buffer.push('0' as u8);
+            }
+            buffer.extend_from_slice(fraction_nums.as_bytes())
         }
-        if let Ok((output, next)) = <Array as Parser<I>>::parse(input, current, context) {
-            return Ok((JsonValue::Array(output), next));
+        if self.exponent != 0 {
+            buffer.push('e' as u8);
+            if self.exponent < 0 {
+                buffer.push('-' as u8);
+            }
+            buffer.extend_from_slice(self.exponent.abs().to_string().as_bytes());
         }
-        if let Ok((output, next)) = <String as Parser<I>>::parse(input, current, context) {
-            return Ok((JsonValue::String(output), next));
-        }
-        if let Ok((output, next)) = <Number as Parser<I>>::parse(input, current, context) {
-            return Ok((JsonValue::Number(output), next));
-        }
-        let (value, next) = input.next_range(current, 4)?;
-        if value == "null" {
-            return Ok((JsonValue::Null, next));
-        }
-        if value == "true" {
-            return Ok((JsonValue::Boolean(true), next));
-        }
-        let (value, next) = input.next_range(current, 5)?;
-        if value == "false" {
-            return Ok((JsonValue::Boolean(false), next));
-        }
-        Err(input.error_at(current, "Value"))
     }
 }
 
-pub struct Object;
+fn push_string(buffer: &mut Vec<u8>, chars: &Vec<char>) {
+    buffer.push('"' as u8);
+    for ch in chars {
+        match ch {
+            '\x08' => buffer.extend_from_slice(br#"\b"#),
+            '\x0c' => buffer.extend_from_slice(br#"\f"#),
+            '\n' => buffer.extend_from_slice(br#"\n"#),
+            '\r' => buffer.extend_from_slice(br#"\r"#),
+            '\t' => buffer.extend_from_slice(br#"\t"#),
+            '\"' => buffer.extend_from_slice(br#"\""#),
+            '\\' => buffer.extend_from_slice(br#"\\"#),
+            _ => match ch.len_utf8() {
+                1 => {
+                    let mut buff = [0u8; 1];
+                    ch.encode_utf8(&mut buff);
+                    buffer.push(buff[0]);
+                }
+                2 => {
+                    let mut buff = [0u8; 2];
+                    ch.encode_utf8(&mut buff);
+                    buffer.extend_from_slice(&buff);
+                }
+                3 => {
+                    let mut buff = [0u8; 3];
+                    ch.encode_utf8(&mut buff);
+                    buffer.extend_from_slice(&buff);
+                }
+                4 => {
+                    let mut buff = [0u8; 4];
+                    ch.encode_utf8(&mut buff);
+                    buffer.extend_from_slice(&buff);
+                }
+                _ => panic!("Invalid UTF8 character"),
+            },
+        }
+    }
+    buffer.push('"' as u8);
+}
 
-type JsonObject = Vec<(Vec<char>, JsonValue)>;
+fn push_new_line_indent(buffer: &mut Vec<u8>, indent: u32, level: u32) {
+    if indent > 0 {
+        buffer.push('\n' as u8);
+    }
+    let count = (indent * level) as usize;
+    buffer.reserve(count);
+    for _ in 0..count {
+        buffer.push(' ' as u8);
+    }
+}
 
-impl<I: Input> Parser<I> for Object {
-    type Output = JsonObject;
-    fn parse(
-        input: &I,
-        current: I::Position,
-        context: &ParserContext,
-    ) -> ResultOf<I, Self::Output> {
-        let context = &context.nest(input, current)?;
-        let (_, next) = <OpenCurlyBracketChar as Parser<I>>::parse(input, current, context)?;
-        let (output, next) =
-            <OneOf<Members, Whitespace> as Parser<I>>::parse(input, next, context)?;
-        let (_, next) = <CloseCurlyBracketChar as Parser<I>>::parse(input, next, context)?;
-        let output = match output {
-            Either::A(a) => a,
-            Either::B(_) => Vec::new(),
+impl Serialize for JsonValue {
+    fn serialize_to(&self, buffer: &mut Vec<u8>, indent: u32, level: u32) {
+        match self {
+            JsonValue::Object(obj) => {
+                buffer.push('{' as u8);
+                if obj.len() > 0 {
+                    push_new_line_indent(buffer, indent, level + 1);
+                    push_string(buffer, &obj[0].0);
+                    buffer.push(':' as u8);
+                    if indent > 0 {
+                        buffer.push(' ' as u8);
+                    }
+                    obj[0].1.serialize_to(buffer, indent, level + 1);
+                    for (key, val) in obj.iter().skip(1) {
+                        buffer.push(',' as u8);
+                        push_new_line_indent(buffer, indent, level + 1);
+                        push_string(buffer, key);
+                        buffer.push(':' as u8);
+                        if indent > 0 {
+                            buffer.push(' ' as u8);
+                        }
+                        val.serialize_to(buffer, indent, level + 1);
+                    }
+                    push_new_line_indent(buffer, indent, level);
+                    buffer.push('}' as u8);
+                } else {
+                    buffer.push('}' as u8);
+                }
+            }
+            JsonValue::Array(arr) => {
+                buffer.push('[' as u8);
+                if arr.len() > 0 {
+                    push_new_line_indent(buffer, indent, level + 1);
+                    arr[0].serialize_to(buffer, indent, level + 1);
+                    for val in arr.iter().skip(1) {
+                        buffer.push(',' as u8);
+                        push_new_line_indent(buffer, indent, level + 1);
+                        val.serialize_to(buffer, indent, level);
+                    }
+                    push_new_line_indent(buffer, indent, level);
+                    buffer.push(']' as u8);
+                } else {
+                    buffer.push(']' as u8);
+                }
+            }
+            JsonValue::String(str) => push_string(buffer, str),
+            JsonValue::Number(num) => num.serialize_to(buffer, indent, level),
+            JsonValue::Boolean(true) => buffer.extend_from_slice(b"true"),
+            JsonValue::Boolean(false) => buffer.extend_from_slice(b"false"),
+            JsonValue::Null => buffer.extend_from_slice(b"null"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn serialize_number_value() {
+        let val = NumberValue {
+            integer: 1234,
+            fraction: 0,
+            fraction_length: 0,
+            exponent: 0,
         };
-        Ok((output, next))
+        assert_eq!(val.serialize(), b"1234");
+
+        let val = NumberValue {
+            integer: -1234,
+            fraction: 0,
+            fraction_length: 0,
+            exponent: 0,
+        };
+        assert_eq!(val.serialize(), b"-1234");
+
+        let val = NumberValue {
+            integer: -1234,
+            fraction: 5678,
+            fraction_length: 4,
+            exponent: 0,
+        };
+        assert_eq!(val.serialize(), b"-1234.5678");
+
+        let val = NumberValue {
+            integer: 1234,
+            fraction: 1,
+            fraction_length: 3,
+            exponent: 0,
+        };
+        assert_eq!(val.serialize(), b"1234.001");
+
+        let val = NumberValue {
+            integer: 1234,
+            fraction: 0,
+            fraction_length: 0,
+            exponent: 3,
+        };
+        assert_eq!(val.serialize(), b"1234e3");
+
+        let val = NumberValue {
+            integer: 1234,
+            fraction: 0,
+            fraction_length: 0,
+            exponent: -5,
+        };
+        assert_eq!(val.serialize(), b"1234e-5");
+
+        let val = NumberValue {
+            integer: 1234,
+            fraction: 56,
+            fraction_length: 4,
+            exponent: -5,
+        };
+        assert_eq!(val.serialize(), b"1234.0056e-5");
+
+        let val = NumberValue {
+            integer: -1234,
+            fraction: 5,
+            fraction_length: 2,
+            exponent: 5,
+        };
+        assert_eq!(val.serialize(), b"-1234.05e5");
     }
-}
 
-pub struct Members;
+    #[test]
+    fn serialize_works() {
+        let obj = JsonValue::Object(vec![(
+            "test\"123".chars().into_iter().collect(),
+            JsonValue::Null,
+        )]);
+        assert_eq!(
+            std::str::from_utf8(&obj.format(4)[..]).unwrap(),
+            r#"{
+    "test\"123": null
+}"#
+        );
 
-impl<I: Input> Parser<I> for Members {
-    type Output = Vec<(Vec<char>, JsonValue)>;
-    fn parse(
-        input: &I,
-        current: I::Position,
-        context: &ParserContext,
-    ) -> ResultOf<I, Self::Output> {
-        let (output, next) = <Member as Parser<I>>::parse(input, current, context)?;
-        let (rest, next) =
-            <ZeroOrMore<Concat<CommaChar, Member>> as Parser<I>>::parse(input, next, context)?;
-        let mut result = Vec::new();
-        result.push(output);
-        if let Either::A(rest) = rest {
-            result.extend(rest.into_iter().map(|(_, m)| m))
-        }
-        Ok((result, next))
-    }
-}
+        let obj = JsonValue::Object(vec![
+            (
+                vec!['t', 'e', 's', 't'],
+                JsonValue::Number(NumberValue {
+                    integer: 123,
+                    fraction: 4,
+                    fraction_length: 2,
+                    exponent: 0,
+                }),
+            ),
+            (
+                vec!['t', 'e', 's', 't', '2'],
+                JsonValue::Array(vec![
+                    JsonValue::Number(NumberValue {
+                        integer: 1,
+                        fraction: 0,
+                        fraction_length: 0,
+                        exponent: -4,
+                    }),
+                    JsonValue::Number(NumberValue {
+                        integer: 2,
+                        fraction: 41,
+                        fraction_length: 3,
+                        exponent: 2,
+                    }),
+                    JsonValue::Boolean(true),
+                    JsonValue::Boolean(false),
+                    JsonValue::Null,
+                    JsonValue::String(vec!['\"', '1', 'n', '\"']),
+                    JsonValue::Object(vec![]),
+                    JsonValue::Array(vec![]),
+                ]),
+            ),
+        ]);
 
-pub struct Elements;
+        assert_eq!(
+            std::str::from_utf8(&obj.format(4)[..]).unwrap(),
+            r#"{
+    "test": 123.04,
+    "test2": [
+        1e-4,
+        2.041e2,
+        true,
+        false,
+        null,
+        "\"1n\"",
+        {},
+        []
+    ]
+}"#
+        );
 
-impl<I: Input> Parser<I> for Elements {
-    type Output = Vec<JsonValue>;
-    fn parse(
-        input: &I,
-        current: I::Position,
-        context: &ParserContext,
-    ) -> ResultOf<I, Self::Output> {
-        let (output, next) = <Element as Parser<I>>::parse(input, current, context)?;
-        let (rest, next) =
-            <ZeroOrMore<Concat<CommaChar, Element>> as Parser<I>>::parse(input, next, context)?;
-        let mut result = Vec::new();
-        result.push(output);
-        if let Either::A(rest) = rest {
-            result.extend(rest.into_iter().map(|(_, m)| m))
-        }
-        Ok((result, next))
-    }
-}
-
-pub struct Array;
-
-impl<I: Input> Parser<I> for Array {
-    type Output = Vec<JsonValue>;
-    fn parse(
-        input: &I,
-        current: I::Position,
-        context: &ParserContext,
-    ) -> ResultOf<I, Self::Output> {
-        let context = &context.nest(input, current)?;
-        let (_, next) = <OpenSquareBracketChar as Parser<I>>::parse(input, current, context)?;
-        let (res, next) = <Elements as Parser<I>>::parse(input, next, context)?;
-        let (_, next) = <CloseSquareBracketChar as Parser<I>>::parse(input, next, context)?;
-        Ok((res, next))
-    }
-}
-
-pub struct Json;
-
-impl<I: Input> Parser<I> for Json {
-    type Output = <Element as Parser<I>>::Output;
-    fn parse(
-        input: &I,
-        current: I::Position,
-        context: &ParserContext,
-    ) -> ResultOf<I, Self::Output> {
-        let (_, next) = <Whitespace as Parser<I>>::parse(input, current, context)?;
-        let (res, next) = <Element as Parser<I>>::parse(input, next, context)?;
-        let (_, next) = <Whitespace as Parser<I>>::parse(input, next, context)?;
-        if input.is_end(next) {
-            Ok((res, next))
-        } else {
-            Err(input.error_at(next, "Expect end of input"))
-        }
+        assert_eq!(
+            std::str::from_utf8(&obj.serialize()[..]).unwrap(),
+            r#"{"test":123.04,"test2":[1e-4,2.041e2,true,false,null,"\"1n\"",{},[]]}"#
+        );
     }
 }

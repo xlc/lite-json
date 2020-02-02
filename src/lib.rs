@@ -1,11 +1,13 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use crate::impls::SimpleError;
-pub use crate::json::{Json, JsonValue};
+pub use crate::json::{JsonObject, JsonValue, NumberValue, Serialize};
+pub use crate::json_parser::Json;
 pub use crate::parser::{Parser, ParserContext, ParserOptions};
 
 pub mod impls;
 pub mod json;
+pub mod json_parser;
 pub mod parser;
 
 pub fn parse_json(input: &str) -> Result<JsonValue, SimpleError> {
@@ -23,7 +25,7 @@ pub fn parse_json_with_options(
 mod tests {
     use super::*;
     use crate::impls::SimplePosition;
-    use crate::json::NumberValue;
+    use crate::NumberValue;
 
     #[test]
     fn it_works() {
