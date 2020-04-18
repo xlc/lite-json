@@ -7,6 +7,8 @@ use alloc::vec::Vec;
 #[cfg(not(feature = "std"))]
 use alloc::string::ToString;
 
+use crate::traits::Serialize;
+
 #[cfg_attr(feature = "std", derive(Debug))]
 #[derive(Clone, PartialEq)]
 pub struct NumberValue {
@@ -46,20 +48,6 @@ pub enum JsonValue {
     Number(NumberValue),
     Boolean(bool),
     Null,
-}
-
-pub trait Serialize {
-    fn serialize(&self) -> Vec<u8> {
-        let mut res = Vec::new();
-        self.serialize_to(&mut res, 0, 0);
-        res
-    }
-    fn format(&self, indent: u32) -> Vec<u8> {
-        let mut res = Vec::new();
-        self.serialize_to(&mut res, indent, 0);
-        res
-    }
-    fn serialize_to(&self, buffer: &mut Vec<u8>, indent: u32, level: u32);
 }
 
 impl Serialize for NumberValue {

@@ -1,10 +1,10 @@
-use crate::parser::{Error, Position};
+use crate::traits::{Error, Position};
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
 #[cfg(not(feature = "std"))]
-use crate::parser::alloc::fmt::Formatter;
+use alloc::fmt::Formatter;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
