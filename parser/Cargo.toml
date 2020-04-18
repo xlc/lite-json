@@ -1,0 +1,19 @@
+[package]
+name = "lite-parser"
+version = "0.1.0"
+authors = ["Bryan Chen <xlchen1291@gmail.com>"]
+description = "Simple parser library. Wasm / no_std ready."
+license = "Apache-2.0"
+edition = "2018"
+keywords = [ "parser", "wasm", "no_std" ]
+repository = "https://github.com/xlc/lite-json"
+categories = [
+    "no-std",
+]
+
+[dependencies]
+paste = "0.1"
+
+[features]
+default = ["std"]
+std = []

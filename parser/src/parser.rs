@@ -1,36 +1,11 @@
+#[cfg(not(feature = "std"))]
 pub extern crate alloc;
 
 use crate::impls::{SimpleError, SimplePosition};
+use crate::traits::{Error, Input, Position, ResultOf};
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 use core::marker::PhantomData;
-
-pub trait Position: core::ops::Sub<Self, Output = i32> + Copy {
-    fn index(&self) -> u32;
-    fn line(&self) -> u32;
-    fn column(&self) -> u32;
-}
-
-pub trait Error {
-    type Position;
-    fn reasons(&self) -> &[(Self::Position, &'static str)];
-    fn add_reason(self, position: Self::Position, reason: &'static str) -> Self;
-}
-
-pub trait Input: Default {
-    type Position: Position;
-    type Error: Error<Position = Self::Position>;
-    fn next(&self, pos: Self::Position) -> Result<(char, Self::Position), Self::Error>;
-    fn next_range(
-        &self,
-        start: Self::Position,
-        counts: u32,
-    ) -> Result<(&str, Self::Position), Self::Error>;
-    fn error_at(&self, pos: Self::Position, reason: &'static str) -> Self::Error;
-    fn is_end(&self, pos: Self::Position) -> bool;
-}
-
-pub type ResultOf<I, O> = Result<(O, <I as Input>::Position), <I as Input>::Error>;
 
 #[cfg_attr(feature = "std", derive(Debug, PartialEq, Eq))]
 #[derive(Clone)]
@@ -264,7 +239,7 @@ macro_rules! literals {
         $( #[ $attr:meta ] )*
         $vis:vis $name:ident => $($value:tt)+
 	) => (
-	    paste::item! {
+	    $crate::paste::item! {
 	        $vis struct [< $name Predicate >];
             impl $crate::parser::Predicate<char> for [< $name Predicate >] {
                 fn eval(c: &char) -> bool {
@@ -291,11 +266,11 @@ macro_rules! parsers {
     ) => {
         $(
             $vis struct $name;
-            impl<I: $crate::parser::Input> $crate::parser::Parser<I> for $name {
+            impl<I: $crate::traits::Input> $crate::parser::Parser<I> for $name {
                 type Output = $output_type;
-                fn parse(input: &I, current: I::Position, context: &ParserContext) -> $crate::parser::ResultOf<I, Self::Output> {
+                fn parse(input: &I, current: I::Position, context: &ParserContext) -> $crate::traits::ResultOf<I, Self::Output> {
                     let ($output, pos) = <$type as $crate::parser::Parser<I>>::parse(input, current, context)
-                        .map_err(|e| <I::Error as $crate::parser::Error>::add_reason(e, current, stringify!($name)))?;
+                        .map_err(|e| <I::Error as $crate::traits::Error>::add_reason(e, current, stringify!($name)))?;
                     let res = $body;
                     Ok((res, pos))
                 }
