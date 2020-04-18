@@ -14,16 +14,18 @@ categories = [
 [dependencies]
 lite-parser = { path = "parser", default-features = false }
 num-traits = { version = "0.2", optional = true, default-features = false }
+lite-json-derive = { path = "derive", default-features = false, optional = true }
 
 [features]
 default = ["std"]
 std = [
     "lite-parser/std"
 ]
-# Enables converting values to floats in no-`std` environment
-float = ["num-traits"]
+float = ["num-traits"] # Enables converting values to floats in no-`std` environment
+derive = ["lite-json-derive"]
 
 [workspace]
 members = [
-    "parser"
+    "parser",
+    "derive"
 ]
