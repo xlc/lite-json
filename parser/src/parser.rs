@@ -223,28 +223,28 @@ macro_rules! literals {
     (
         $(
             $( #[ $attr:meta ] )*
-            $vis:vis $name:ident => $($value:expr)+;
+            $vis:vis $name:ident => $($($value:literal)..=+)|+;
         )*
     ) => {
         $(
             $crate::literals!{
                 IMPL
                 $( #[ $attr ] )*
-                $vis $name => $($value)+
+                $vis $name => $($($value)..=+)|+
             }
         )*
     };
     (
         IMPL
         $( #[ $attr:meta ] )*
-        $vis:vis $name:ident => $($value:tt)+
+        $vis:vis $name:ident => $($($value:literal)..=+)|+
     ) => (
         $crate::paste::item! {
             $vis struct [< $name Predicate >];
             impl $crate::parser::Predicate<char> for [< $name Predicate >] {
                 fn eval(c: &char) -> bool {
                     match *c {
-                        $($value)+ => true,
+                        $($($value)..=+)|+ => true,
                         _ => false
                     }
                 }
