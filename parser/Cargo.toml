@@ -1,6 +1,6 @@
 [package]
 name = "lite-parser"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Bryan Chen <xlchen1291@gmail.com>"]
 description = "Simple parser library. Wasm / no_std ready."
 license = "Apache-2.0"
