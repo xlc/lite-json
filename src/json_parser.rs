@@ -329,9 +329,14 @@ impl<I: Input> Parser<I> for Array {
     ) -> ResultOf<I, Self::Output> {
         let context = &context.nest(input, current)?;
         let (_, next) = <OpenSquareBracketChar as Parser<I>>::parse(input, current, context)?;
-        let (res, next) = <Elements as Parser<I>>::parse(input, next, context)?;
+        let (output, next) =
+            <OneOf<Elements, Whitespace> as Parser<I>>::parse(input, next, context)?;
         let (_, next) = <CloseSquareBracketChar as Parser<I>>::parse(input, next, context)?;
-        Ok((res, next))
+        let output = match output {
+            Either::A(a) => a,
+            Either::B(_) => Vec::new(),
+        };
+        Ok((output, next))
     }
 }
 
@@ -375,7 +380,9 @@ mod tests {
     #[test]
     fn it_works() {
         assert_eq!(
-            parse_json(&r#"{ "test": 1, "test2": [1e-4, 2.041e2, true, false, null, "\"1\n\""] }"#),
+            parse_json(
+                &r#"{ "test": 1, "test2": [1e-4, 2.041e2, true, false, null, "\"1\n\""], "test3": [], "test4": {} }"#
+            ),
             Ok(JsonValue::Object(vec![
                 (
                     vec!['t', 'e', 's', 't'],
@@ -406,7 +413,9 @@ mod tests {
                         JsonValue::Null,
                         JsonValue::String(vec!['\"', '1', 'n', '\"'])
                     ])
-                )
+                ),
+                (vec!['t', 'e', 's', 't', '3'], JsonValue::Array(vec![])),
+                (vec!['t', 'e', 's', 't', '4'], JsonValue::Object(vec![]))
             ]))
         )
     }
