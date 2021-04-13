@@ -317,17 +317,44 @@ mod tests {
         let obj = JsonValue::Object(vec![(vec![], JsonValue::Null)]);
         assert!(obj.is_object());
         assert_eq!(obj.as_object(), Some(&[(vec![], JsonValue::Null)][..]));
-        assert_eq!(obj.to_object(), Some(vec![(vec![], JsonValue::Null)]));
+        assert_eq!(obj.as_array(), None);
+        assert_eq!(obj.as_bool(), None);
+        assert_eq!(obj.as_number(), None);
+        assert_eq!(obj.as_string(), None);
+        assert_eq!(
+            obj.clone().to_object(),
+            Some(vec![(vec![], JsonValue::Null)]),
+        );
+        assert_eq!(obj.clone().to_array(), None);
+        assert_eq!(obj.clone().to_bool(), None);
+        assert_eq!(obj.clone().to_number(), None);
+        assert_eq!(obj.clone().to_string(), None);
 
         let arr = JsonValue::Array(vec![JsonValue::Null]);
         assert!(arr.is_array());
         assert_eq!(arr.as_array(), Some(&[JsonValue::Null][..]));
-        assert_eq!(arr.to_array(), Some(vec![JsonValue::Null]));
+        assert_eq!(arr.as_object(), None);
+        assert_eq!(arr.as_bool(), None);
+        assert_eq!(arr.as_number(), None);
+        assert_eq!(arr.as_string(), None);
+        assert_eq!(arr.clone().to_array(), Some(vec![JsonValue::Null]));
+        assert_eq!(arr.clone().to_object(), None);
+        assert_eq!(arr.clone().to_bool(), None);
+        assert_eq!(arr.clone().to_number(), None);
+        assert_eq!(arr.clone().to_string(), None);
 
         let s = JsonValue::String(vec!['a']);
         assert!(s.is_string());
         assert_eq!(s.as_string(), Some(&['a'][..]));
-        assert_eq!(s.to_string(), Some(vec!['a']));
+        assert_eq!(s.as_object(), None);
+        assert_eq!(s.as_bool(), None);
+        assert_eq!(s.as_number(), None);
+        assert_eq!(s.as_array(), None);
+        assert_eq!(s.clone().to_string(), Some(vec!['a']));
+        assert_eq!(s.clone().to_object(), None);
+        assert_eq!(s.clone().to_bool(), None);
+        assert_eq!(s.clone().to_number(), None);
+        assert_eq!(s.clone().to_array(), None);
 
         let n = JsonValue::Number(NumberValue {
             integer: 0,
@@ -345,8 +372,12 @@ mod tests {
                 exponent: 0
             }),
         );
+        assert_eq!(n.as_object(), None);
+        assert_eq!(n.as_bool(), None);
+        assert_eq!(n.as_string(), None);
+        assert_eq!(n.as_array(), None);
         assert_eq!(
-            n.to_number(),
+            n.clone().to_number(),
             Some(NumberValue {
                 integer: 0,
                 fraction: 0,
@@ -354,14 +385,36 @@ mod tests {
                 exponent: 0
             }),
         );
+        assert_eq!(n.clone().to_object(), None);
+        assert_eq!(n.clone().to_bool(), None);
+        assert_eq!(n.clone().to_string(), None);
+        assert_eq!(n.clone().to_array(), None);
 
         let b = JsonValue::Boolean(false);
         assert!(b.is_bool());
         assert_eq!(b.as_bool(), Some(&false));
-        assert_eq!(b.to_bool(), Some(false));
+        assert_eq!(b.as_object(), None);
+        assert_eq!(b.as_number(), None);
+        assert_eq!(b.as_string(), None);
+        assert_eq!(b.as_array(), None);
+        assert_eq!(b.clone().to_bool(), Some(false));
+        assert_eq!(b.clone().to_object(), None);
+        assert_eq!(b.clone().to_number(), None);
+        assert_eq!(b.clone().to_string(), None);
+        assert_eq!(b.clone().to_array(), None);
 
         let null = JsonValue::Null;
         assert!(null.is_null());
+        assert_eq!(null.as_array(), None);
+        assert_eq!(null.as_bool(), None);
+        assert_eq!(null.as_number(), None);
+        assert_eq!(null.as_object(), None);
+        assert_eq!(null.as_string(), None);
+        assert_eq!(null.clone().to_array(), None);
+        assert_eq!(null.clone().to_bool(), None);
+        assert_eq!(null.clone().to_number(), None);
+        assert_eq!(null.clone().to_object(), None);
+        assert_eq!(null.clone().to_string(), None);
     }
 
     #[test]
