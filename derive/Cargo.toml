@@ -1,0 +1,19 @@
+[package]
+name = "lite-json-derive"
+description = "Serialization and deserialization derive macro for lite-json"
+version = "0.1.0"
+authors = ["Bryan Chen <xlchen1291@gmail.com>"]
+license = "Apache-2.0"
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "1.0.8", features = [ "full", "visit" ] }
+quote = "1.0.2"
+proc-macro2 = "1.0.6"
+proc-macro-crate = "0.1.4"
+
+[dev-dependencies]
+lite-json = { path = "..", version = "0.1.0" }
