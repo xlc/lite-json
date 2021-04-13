@@ -67,11 +67,11 @@ impl JsonValue {
         }
     }
 
-    /// Returns the wrapped object if the value is an object, otherwise panics.
-    pub fn to_object(self) -> JsonObject {
+    /// Returns the wrapped object if the value is an object, otherwise returns None.
+    pub fn to_object(self) -> Option<JsonObject> {
         match self {
-            JsonValue::Object(obj) => obj,
-            _ => panic!("Called JsonValue::to_object() on a non-object value"),
+            JsonValue::Object(obj) => Some(obj),
+            _ => None,
         }
     }
 
@@ -91,11 +91,11 @@ impl JsonValue {
         }
     }
 
-    /// Returns the wrapped vector if the value is an array, otherwise panics.
-    pub fn to_array(self) -> Vec<JsonValue> {
+    /// Returns the wrapped vector if the value is an array, otherwise returns None.
+    pub fn to_array(self) -> Option<Vec<JsonValue>> {
         match self {
-            JsonValue::Array(arr) => arr,
-            _ => panic!("Called JsonValue::to_array() on a non-array value"),
+            JsonValue::Array(arr) => Some(arr),
+            _ => None,
         }
     }
 
@@ -115,11 +115,11 @@ impl JsonValue {
         }
     }
 
-    /// Returns the wrapped vector if the value is a string, otherwise panics.
-    pub fn to_string(self) -> Vec<char> {
+    /// Returns the wrapped vector if the value is a string, otherwise returns None.
+    pub fn to_string(self) -> Option<Vec<char>> {
         match self {
-            JsonValue::String(s) => s,
-            _ => panic!("Called JsonValue::to_string() on a non-string value"),
+            JsonValue::String(s) => Some(s),
+            _ => None,
         }
     }
 
@@ -139,11 +139,11 @@ impl JsonValue {
         }
     }
 
-    /// Returns the wrapped NumberValue if the value is a number, otherwise panics.
-    pub fn to_number(self) -> NumberValue {
+    /// Returns the wrapped NumberValue if the value is a number, otherwise returns None.
+    pub fn to_number(self) -> Option<NumberValue> {
         match self {
-            JsonValue::Number(n) => n,
-            _ => panic!("Called JsonValue::to_number() on a non-number value"),
+            JsonValue::Number(n) => Some(n),
+            _ => None,
         }
     }
 
@@ -163,11 +163,11 @@ impl JsonValue {
         }
     }
 
-    /// Returns the wrapped boolean if the value is a boolean, otherwise panics.
-    pub fn to_bool(self) -> bool {
+    /// Returns the wrapped boolean if the value is a boolean, otherwise returns None.
+    pub fn to_bool(self) -> Option<bool> {
         match self {
-            JsonValue::Boolean(b) => b,
-            _ => panic!("Called JsonValue::to_bool() on a non-boolean value"),
+            JsonValue::Boolean(b) => Some(b),
+            _ => None,
         }
     }
 
@@ -317,17 +317,17 @@ mod tests {
         let obj = JsonValue::Object(vec![(vec![], JsonValue::Null)]);
         assert!(obj.is_object());
         assert_eq!(obj.as_object(), Some(&[(vec![], JsonValue::Null)][..]));
-        assert_eq!(obj.to_object(), vec![(vec![], JsonValue::Null)]);
+        assert_eq!(obj.to_object(), Some(vec![(vec![], JsonValue::Null)]));
 
         let arr = JsonValue::Array(vec![JsonValue::Null]);
         assert!(arr.is_array());
         assert_eq!(arr.as_array(), Some(&[JsonValue::Null][..]));
-        assert_eq!(arr.to_array(), vec![JsonValue::Null]);
+        assert_eq!(arr.to_array(), Some(vec![JsonValue::Null]));
 
         let s = JsonValue::String(vec!['a']);
         assert!(s.is_string());
         assert_eq!(s.as_string(), Some(&['a'][..]));
-        assert_eq!(s.to_string(), vec!['a']);
+        assert_eq!(s.to_string(), Some(vec!['a']));
 
         let n = JsonValue::Number(NumberValue {
             integer: 0,
@@ -343,22 +343,22 @@ mod tests {
                 fraction: 0,
                 fraction_length: 0,
                 exponent: 0
-            })
+            }),
         );
         assert_eq!(
             n.to_number(),
-            NumberValue {
+            Some(NumberValue {
                 integer: 0,
                 fraction: 0,
                 fraction_length: 0,
                 exponent: 0
-            }
+            }),
         );
 
         let b = JsonValue::Boolean(false);
         assert!(b.is_bool());
         assert_eq!(b.as_bool(), Some(&false));
-        assert_eq!(b.to_bool(), false);
+        assert_eq!(b.to_bool(), Some(false));
 
         let null = JsonValue::Null;
         assert!(null.is_null());
