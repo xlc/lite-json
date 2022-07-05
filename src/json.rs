@@ -35,7 +35,8 @@ impl Into<f64> for NumberValue {
 
         let sign = if self.negative { -1.0 } else { 1.0 };
         (self.integer as f64 + self.fraction as f64 / 10f64.powi(self.fraction_length as i32))
-            * 10f64.powi(self.exponent) * sign
+            * 10f64.powi(self.exponent)
+            * sign
     }
 }
 
