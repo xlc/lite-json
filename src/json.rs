@@ -10,12 +10,13 @@ use alloc::string::ToString;
 use crate::traits::Serialize;
 
 #[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Copy)]
 pub struct NumberValue {
-    pub integer: i64,
+    pub integer: u64,
     pub fraction: u64,
     pub fraction_length: u32,
     pub exponent: i32,
+    pub negative: bool,
 }
 
 impl NumberValue {
@@ -32,8 +33,10 @@ impl Into<f64> for NumberValue {
         #[cfg(not(feature = "std"))]
         use num_traits::float::FloatCore as _;
 
+        let sign = if self.negative { -1.0 } else { 1.0 };
         (self.integer as f64 + self.fraction as f64 / 10f64.powi(self.fraction_length as i32))
             * 10f64.powi(self.exponent)
+            * sign
     }
 }
 
@@ -182,22 +185,25 @@ impl JsonValue {
 
 impl Serialize for NumberValue {
     fn serialize_to(&self, buffer: &mut Vec<u8>, _indent: u32, _level: u32) {
+        if self.negative {
+            buffer.push(b'-');
+        }
         buffer.extend_from_slice(self.integer.to_string().as_bytes());
 
         if self.fraction > 0 {
-            buffer.push('.' as u8);
+            buffer.push(b'.');
 
             let fraction_nums = self.fraction.to_string();
             let fraction_length = self.fraction_length as usize;
             for _ in 0..fraction_length - fraction_nums.len() {
-                buffer.push('0' as u8);
+                buffer.push(b'0');
             }
             buffer.extend_from_slice(fraction_nums.as_bytes())
         }
         if self.exponent != 0 {
-            buffer.push('e' as u8);
+            buffer.push(b'e');
             if self.exponent < 0 {
-                buffer.push('-' as u8);
+                buffer.push(b'-');
             }
             buffer.extend_from_slice(self.exponent.abs().to_string().as_bytes());
         }
@@ -361,6 +367,7 @@ mod tests {
             fraction: 0,
             fraction_length: 0,
             exponent: 0,
+            negative: false,
         });
         assert!(n.is_number());
         assert_eq!(
@@ -369,7 +376,8 @@ mod tests {
                 integer: 0,
                 fraction: 0,
                 fraction_length: 0,
-                exponent: 0
+                exponent: 0,
+                negative: false,
             }),
         );
         assert_eq!(n.as_object(), None);
@@ -382,7 +390,8 @@ mod tests {
                 integer: 0,
                 fraction: 0,
                 fraction_length: 0,
-                exponent: 0
+                exponent: 0,
+                negative: false,
             }),
         );
         assert_eq!(n.clone().to_object(), None);
@@ -424,22 +433,25 @@ mod tests {
             fraction: 0,
             fraction_length: 0,
             exponent: 0,
+            negative: false,
         };
         assert_eq!(val.serialize(), b"1234");
 
         let val = NumberValue {
-            integer: -1234,
+            integer: 1234,
             fraction: 0,
             fraction_length: 0,
             exponent: 0,
+            negative: true,
         };
         assert_eq!(val.serialize(), b"-1234");
 
         let val = NumberValue {
-            integer: -1234,
+            integer: 1234,
             fraction: 5678,
             fraction_length: 4,
             exponent: 0,
+            negative: true,
         };
         assert_eq!(val.serialize(), b"-1234.5678");
 
@@ -448,6 +460,7 @@ mod tests {
             fraction: 1,
             fraction_length: 3,
             exponent: 0,
+            negative: false,
         };
         assert_eq!(val.serialize(), b"1234.001");
 
@@ -456,6 +469,7 @@ mod tests {
             fraction: 0,
             fraction_length: 0,
             exponent: 3,
+            negative: false,
         };
         assert_eq!(val.serialize(), b"1234e3");
 
@@ -464,6 +478,7 @@ mod tests {
             fraction: 0,
             fraction_length: 0,
             exponent: -5,
+            negative: false,
         };
         assert_eq!(val.serialize(), b"1234e-5");
 
@@ -472,14 +487,16 @@ mod tests {
             fraction: 56,
             fraction_length: 4,
             exponent: -5,
+            negative: false,
         };
         assert_eq!(val.serialize(), b"1234.0056e-5");
 
         let val = NumberValue {
-            integer: -1234,
+            integer: 1234,
             fraction: 5,
             fraction_length: 2,
             exponent: 5,
+            negative: true,
         };
         assert_eq!(val.serialize(), b"-1234.05e5");
     }
@@ -505,6 +522,7 @@ mod tests {
                     fraction: 4,
                     fraction_length: 2,
                     exponent: 0,
+                    negative: false,
                 }),
             ),
             (
@@ -515,12 +533,14 @@ mod tests {
                         fraction: 0,
                         fraction_length: 0,
                         exponent: -4,
+                        negative: false,
                     }),
                     JsonValue::Number(NumberValue {
                         integer: 2,
                         fraction: 41,
                         fraction_length: 3,
                         exponent: 2,
+                        negative: false,
                     }),
                     JsonValue::Boolean(true),
                     JsonValue::Boolean(false),
@@ -552,6 +572,71 @@ mod tests {
         assert_eq!(
             std::str::from_utf8(&obj.serialize()[..]).unwrap(),
             r#"{"test":123.04,"test2":[1e-4,2.041e2,true,false,null,"\"1n\"",{},[]]}"#
+        );
+    }
+
+    #[test]
+    fn to_f64_works() {
+        use assert_float_eq::*;
+
+        assert_f64_near!(
+            NumberValue {
+                integer: 1,
+                fraction: 5,
+                fraction_length: 1,
+                exponent: 0,
+                negative: true,
+            }
+            .to_f64(),
+            -1.5
+        );
+
+        assert_f64_near!(
+            NumberValue {
+                integer: 0,
+                fraction: 5,
+                fraction_length: 1,
+                exponent: 0,
+                negative: true,
+            }
+            .to_f64(),
+            -0.5
+        );
+
+        assert_f64_near!(
+            NumberValue {
+                integer: 0,
+                fraction: 5,
+                fraction_length: 1,
+                exponent: 0,
+                negative: false,
+            }
+            .to_f64(),
+            0.5
+        );
+
+        assert_f64_near!(
+            NumberValue {
+                integer: 1,
+                fraction: 15,
+                fraction_length: 3,
+                exponent: 1,
+                negative: false,
+            }
+            .to_f64(),
+            10.15
+        );
+
+        assert_f64_near!(
+            NumberValue {
+                integer: 1,
+                fraction: 15,
+                fraction_length: 3,
+                exponent: -1,
+                negative: true,
+            }
+            .to_f64(),
+            -0.1015
         );
     }
 }

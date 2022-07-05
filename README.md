@@ -8,15 +8,15 @@ Simple JSON parser written with Rust. Wasm / no_std ready.
 ## How to Add in Cargo.toml
 
 ### std
-```
+```toml
 [dependencies]
-lite-json = "0.1.3"
+lite-json = "0.2.0"
 ```
 
 ### no_std
-```
+```toml
 [dependencies]
-lite-json = {version="0.1.3", default-features=false, defaults=["no_std"]}
+lite-json = { version = "0.2.0", default-features = false, defaults = ["no_std"] }
 ```
 
 ## Example Usage
@@ -25,7 +25,7 @@ lite-json = {version="0.1.3", default-features=false, defaults=["no_std"]}
 
 This example will create a lite-json structure, then print it as a JSON string.
 
-```
+```rs
 use lite_json::Serialize;
 use lite_json::json::{JsonValue, NumberValue};
 
@@ -45,7 +45,7 @@ fn main()
 	object_elements.push((object_key, JsonValue::Array(array_value)));
 
 	// Create a string value and add it to our vector.
-	let string_value = "Hello World!".chars().collect(); 
+	let string_value = "Hello World!".chars().collect();
 	let object_key = "string".chars().collect();
 	object_elements.push((object_key, JsonValue::String(string_value)));
 
@@ -63,7 +63,7 @@ fn main()
 	// Create a null value and add it to our vector.
 	let object_key = "null".chars().collect();
 	object_elements.push((object_key, JsonValue::Null));
-	
+
 	// Create the object value from the vector of elements.
 	let object_value = JsonValue::Object(object_elements);
 
@@ -76,7 +76,7 @@ fn main()
 ```
 
 This will output:
-```
+```json
 {
     "boolean": true,
     "array": [
@@ -94,13 +94,13 @@ This will output:
 
 This example will parse a JSON string into a lite-json structure.
 
-```
+```rs
 use lite_json::json_parser::parse_json;
 
 fn main()
 {
 	// This is the JSON string we will use.
-	let json_string = 
+	let json_string =
 	r#"
 		{
 			"boolean": true,
@@ -128,14 +128,14 @@ The parser options allows you to set the max depth of parsing nested objects. Th
 
 Note: This example requires the `lite-parser` crate to be added to `Cargo.toml`.
 
-```
+```rs
 use lite_json::json_parser::parse_json_with_options;
 use lite_parser::parser::ParserOptions;
 
 fn main()
 {
 	// This is the JSON string we will use.
-	let json_string = 
+	let json_string =
 	r#"
 		{
 			"boolean": true,

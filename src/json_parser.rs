@@ -56,15 +56,15 @@ parsers! {
         }
     };
 
-    pub NegativeInteger = Concat<NegativeSignChar, PositiveInteger>, i64, (output) => {
+    pub NegativeInteger = Concat<NegativeSignChar, PositiveInteger>, u64, (output) => {
         let (_, output) = output;
-        - (output as i64)
+        output
     };
 
-    pub Integer = OneOf<PositiveInteger, NegativeInteger>, i64, (output) => {
+    pub Integer = OneOf<PositiveInteger, NegativeInteger>, (bool, u64), (output) => {
         match output {
-            Either::A(a) => a as i64,
-            Either::B(b) => b,
+            Either::A(a) => (false, a),
+            Either::B(b) => (true, b),
         }
     };
 
@@ -99,12 +99,13 @@ parsers! {
     };
 
     pub Number = Concat3<Integer, Fraction, Exponent>, NumberValue, (output) => {
-        let (n, (f, e)) = output;
+        let ((s, n), (f, e)) = output;
         NumberValue {
             integer: n,
             fraction: f.0,
             fraction_length: f.1,
             exponent: e,
+            negative: s,
         }
     };
 
@@ -390,7 +391,8 @@ mod tests {
                         integer: 1,
                         fraction: 0,
                         fraction_length: 0,
-                        exponent: 0
+                        exponent: 0,
+                        negative: false,
                     })
                 ),
                 (
@@ -401,12 +403,14 @@ mod tests {
                             fraction: 0,
                             fraction_length: 0,
                             exponent: -4,
+                            negative: false,
                         }),
                         JsonValue::Number(NumberValue {
                             integer: 2,
                             fraction: 41,
                             fraction_length: 3,
                             exponent: 2,
+                            negative: false,
                         }),
                         JsonValue::Boolean(true),
                         JsonValue::Boolean(false),
@@ -452,7 +456,8 @@ mod tests {
                     integer: 1,
                     fraction: 0,
                     fraction_length: 0,
-                    exponent: 0
+                    exponent: 0,
+                    negative: false,
                 })
             ),]))
         );
@@ -496,6 +501,42 @@ mod tests {
                     "Value"
                 )]
             })
+        );
+    }
+
+    #[test]
+    fn handles_decimal_number() {
+        assert_eq!(
+            parse_json(&r#"-1.5"#,),
+            Ok(JsonValue::Number(NumberValue {
+                integer: 1,
+                fraction: 5,
+                fraction_length: 1,
+                exponent: 0,
+                negative: true,
+            }))
+        );
+
+        assert_eq!(
+            parse_json(&r#"-0.5"#,),
+            Ok(JsonValue::Number(NumberValue {
+                integer: 0,
+                fraction: 5,
+                fraction_length: 1,
+                exponent: 0,
+                negative: true,
+            }))
+        );
+
+        assert_eq!(
+            parse_json(&r#"0.5"#,),
+            Ok(JsonValue::Number(NumberValue {
+                integer: 0,
+                fraction: 5,
+                fraction_length: 1,
+                exponent: 0,
+                negative: false,
+            }))
         );
     }
 }
