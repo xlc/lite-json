@@ -1,6 +1,6 @@
 [package]
 name = "lite-parser"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["Bryan Chen <xlchen1291@gmail.com>"]
 description = "Simple parser library. Wasm / no_std ready."
 license = "Apache-2.0"
@@ -12,7 +12,7 @@ categories = [
 ]
 
 [dependencies]
-paste = "0.1"
+paste = "1.0.7"
 
 [features]
 default = ["std"]
